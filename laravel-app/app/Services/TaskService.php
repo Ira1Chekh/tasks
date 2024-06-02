@@ -68,16 +68,9 @@ class TaskService{
         $result = [];
         foreach ($tasks as $task) {
             $subtasks = $this->fetchSubtasks($task->subtasks);
-            $result[] = [
-                'id' => $task->id,
-                'title' => $task->title,
-                'description' => $task->description,
-                'priority' => $task->priority,
-                'status' => $task->status,
-                'completed_at' => $task->completed_at,
-                'parent_id' => $task->parent_id,
-                'subtasks' => $subtasks,
-            ];
+            $taskItem = $task->toArray();
+            $taskItem['subtasks'] = $subtasks;
+            $result[] = $taskItem;
         }
         return $result;
     }
