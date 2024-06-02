@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Task;
 use App\DTO\TaskDTO;
+use App\DTO\TaskListDTO;
 use App\Http\Requests\TaskCreateRequest;
 use App\Http\Requests\TaskListRequest;
+use App\Enums\TaskStatus;
 use App\Services\TaskService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Http\JsonResponse;
 
 /**
  * @OA\Info(
@@ -82,9 +85,10 @@ class TaskController extends Controller
      *      security={{"bearerAuth":{}}}
      * )
      */ 
-    public function index(TaskListRequest $request)
+    public function index(TaskListRequest $request): JsonResponse
     {
-        $tasks = $this->taskService->listTask($request);
+        $dto = new TaskListDTO($request);
+        $tasks = $this->taskService->listTask($dto);
 
         return response()->json($tasks);
     }
@@ -117,9 +121,19 @@ class TaskController extends Controller
      *      security={{"bearerAuth":{}}}
      * )
      */
-    public function store(TaskCreateRequest $request)
+    public function store(TaskCreateRequest $request): JsonResponse
     {
-        $task = $this->taskService->createTask($request);
+        $dto = new TaskDTO(
+            id: null,
+            title: $request->get('title'),
+            description: $request->get('description'),
+            status: TaskStatus::TODO,
+            priority: $request->get('priority'),
+            user_id: $request->user()->id,
+            completed_at: $request->get('completed_at'),
+            parent_id: $request->get('parent_id')
+        );
+        $task = $this->taskService->createTask($dto);
 
         return response()->json($task, 201);
     }
@@ -150,8 +164,10 @@ class TaskController extends Controller
      *      security={{"bearerAuth":{}}}
      * )
      */
-    public function show(Task $task)
+    public function show(Task $task): JsonResponse
     {
+        $task = $this->taskService->showTask($task);
+
         return response()->json($task);
     }
 
@@ -191,9 +207,19 @@ class TaskController extends Controller
      *      security={{"bearerAuth":{}}}
      * )
      */
-    public function update(TaskCreateRequest $request, Task $task)
+    public function update(TaskCreateRequest $request, Task $task): JsonResponse
     {
-        $task = $this->taskService->updateTask($request, $task);
+        $dto = new TaskDTO(
+            id: $task->id,
+            title: $request->get('title'),
+            description: $request->get('description'),
+            status: $task->status,
+            priority: $request->get('priority'),
+            user_id: $request->user()->id,
+            completed_at: $request->get('completed_at'),
+            parent_id: $request->get('parent_id')
+        );
+        $task = $this->taskService->updateTask($dto, $task);
 
         return response()->json($task, 200);
     }
@@ -224,11 +250,20 @@ class TaskController extends Controller
      *      security={{"bearerAuth":{}}}
      * )
      */
-    public function complete(Task $task)
+    public function complete(Task $task): JsonResponse
     {
-
         Gate::authorize('complete', $task);
-        $task = $this->taskService->completeTask($task);
+        $dto = new TaskDTO(
+            id: $task->id,
+            title: $task->title,
+            description: $task->description,
+            status: TaskStatus::DONE,
+            priority: $task->priority,
+            user_id: $task->user_id,
+            completed_at: date('Y-m-d H:i:s'),
+            parent_id: $task->parent_id
+        );
+        $task = $this->taskService->completeTask($dto, $task);
 
         return response()->json($task, 200);
     }
@@ -258,7 +293,7 @@ class TaskController extends Controller
      *      security={{"bearerAuth":{}}}
      * )
      */
-    public function destroy(Task $task)
+    public function destroy(Task $task): JsonResponse
     {
         $task->delete();
         return response()->json(null, 204);

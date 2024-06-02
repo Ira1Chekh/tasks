@@ -3,114 +3,94 @@
 namespace App\Services;
 
 use App\DTO\TaskDTO;
+use App\DTO\TaskListDTO;
 use App\Models\Task;
-use App\Http\Requests\TaskCreateRequest;
-use App\Http\Requests\TaskListRequest;
 use Illuminate\Support\Facades\Auth;
 use App\Enums\TaskStatus;
+use App\Http\Resources\TaskResource;
 
 class TaskService{
 
-    public function createTask(TaskCreateRequest $request): TaskDTO
+    public function createTask(TaskDTO $dto): TaskResource
     {
-        $dto = new TaskDTO(
-                id: null,
-                title: $request->get('title'),
-                description: $request->get('description'),
-                status: TaskStatus::TODO,
-                priority: $request->get('priority'),
-                user_id: $request->user()->id,
-                completed_at: $request->get('completed_at'),
-                parent_id: $request->get('parent_id')
-            );
         $task = $dto->toModel();
         $task->save();
 
-        return TaskDTO::fromModel($task);
+        return TaskResource::make($task);
     }
 
-    public function updateTask(TaskCreateRequest $request, Task $task): TaskDTO
+    public function updateTask(TaskDTO $dto, Task $task): TaskResource
     {
-        $dto = new TaskDTO(
-            id: $task->id,
-            title: $request->get('title'),
-            description: $request->get('description'),
-            status: $task->status,
-            priority: $request->get('priority'),
-            user_id: $request->user()->id,
-            completed_at: $request->get('completed_at'),
-            parent_id: $request->get('parent_id')
-        );
         $task->update($dto->toModel()->toArray());
 
-        return TaskDTO::fromModel($task);
+        return TaskResource::make($task);
     }
 
-
-    public function listTask(TaskListRequest $request): array
+    public function listTask(TaskListDTO $dto): array
     {
-        $tasks = Task::where('user_id', $request->user()->id)
+        $tasks = Task::where('user_id', Auth::id())
             ->whereNull('parent_id')
-            ->when($request->get('status'), function ($query, $status) {
+            ->when($dto->status, function ($query, $status) {
                 $query->where('status', $status);
             })
-            ->when($request->get('priority'), function ($query, $priority) {
+            ->when($dto->priority, function ($query, $priority) {
                 $query->where('priority', $priority);
             })
-            ->when($request->get('search'), function ($query, $search) {
+            ->when($dto->search, function ($query, $search) {
                 $query->whereFullText(['title', 'description'], $search);
             })
-            ->when($request->get('sort'), function ($query, $sort) {
-                $sortArray = explode(',', $sort);
-                foreach($sortArray as $sortItem) {
-                    [$field, $direction] = explode(' ', trim($sortItem));
-                    if (in_array($field, ['priority', 'created_at', 'completed_at']) && in_array(strtolower($direction), ['asc', 'desc'])) {
-                        $query->orderBy($field, $direction);
-                    }
-                }
+            ->when($dto->sort, function ($query, $sort) {
+                $this->applySorting($query, $sort);
             })
             ->with('subtasks')
             ->get();
 
-        $fetchSubtasks = function ($tasks) use (&$fetchSubtasks) {
-            $result = [];
-            foreach ($tasks as $task) {
-                $subtasks = $fetchSubtasks($task->subtasks);
-                $result[] = [
-                    'id' => $task->id,
-                    'title' => $task->title,
-                    'description' => $task->description,
-                    'priority' => $task->priority,
-                    'status' => $task->status,
-                    'completed_at' => $task->completed_at,
-                    'subtasks' => $subtasks,
-                ];
+        return $this->fetchSubtasks($tasks);
+    }
+
+    private function applySorting($query, string $sort): void
+    {
+        $sortArray = explode(',', $sort);
+        foreach ($sortArray as $sortItem) {
+            [$field, $direction] = explode(' ', trim($sortItem));
+            $field = strtolower($field);
+            $direction = strtolower($direction);
+
+            if (in_array($field, ['priority', 'created_at', 'completed_at']) &&
+                in_array($direction, ['asc', 'desc'])) {
+                $query->orderBy($field, $direction);
             }
-            return $result;
-        };
-
-        return $fetchSubtasks($tasks);
+        }
     }
 
-    public function showTask(Task $task): TaskDTO
+    private function fetchSubtasks($tasks): array
     {
-        return TaskDTO::fromModel($task);
+        $result = [];
+        foreach ($tasks as $task) {
+            $subtasks = $this->fetchSubtasks($task->subtasks);
+            $result[] = [
+                'id' => $task->id,
+                'title' => $task->title,
+                'description' => $task->description,
+                'priority' => $task->priority,
+                'status' => $task->status,
+                'completed_at' => $task->completed_at,
+                'parent_id' => $task->parent_id,
+                'subtasks' => $subtasks,
+            ];
+        }
+        return $result;
     }
 
-    public function completeTask(Task $task): TaskDTO
+    public function showTask(Task $task): TaskResource
     {
-        $dto = new TaskDTO(
-            id: $task->id,
-            title: $task->title,
-            description: $task->description,
-            status: TaskStatus::DONE,
-            priority: $task->priority,
-            user_id: $task->user_id,
-            completed_at: date('Y-m-d H:i:s'),
-            parent_id: $task->parent_id
-        );
+        return TaskResource::make($task->load(['user', 'subtasks']));
+    }
+
+    public function completeTask(TaskDTO $dto, Task $task): TaskResource
+    {
         $task->update($dto->toModel()->toArray());
 
-        return TaskDTO::fromModel($task);
+        return TaskResource::make($task);
     }
 }
