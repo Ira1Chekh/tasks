@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TaskController;
+use App\Jobs\ProcessRabbitMQMessage;
 
 /*
 |--------------------------------------------------------------------------
@@ -27,4 +28,9 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('tasks', TaskController::class);
     Route::patch('tasks/{task}/complete', [TaskController::class, 'complete']);
+});
+
+Route::get('/send-message', function () {
+    ProcessRabbitMQMessage::dispatch();
+    return 'Message sent to RabbitMQ!';
 });

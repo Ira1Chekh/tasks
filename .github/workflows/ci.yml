@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  laravel-ci:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:latest
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: laravel_docker
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping --silent" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Compose
+        run: docker-compose up -d --build
+
+      - name: Wait for services
+        run: sleep 20
+
+      - name: Run PHPStan
+        run: docker exec laravel-docker ./vendor/bin/phpstan analyse -c phpstan.neon
+
+      - name: Run Laravel tests
+        run: docker exec laravel-docker php artisan test
+
+      - name: Shutdown
+        if: always()
+        run: docker-compose down -v

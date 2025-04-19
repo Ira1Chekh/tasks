@@ -8,6 +8,8 @@ use App\Models\Task;
 use Illuminate\Support\Facades\Auth;
 use App\Enums\TaskStatus;
 use App\Http\Resources\TaskResource;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 class TaskService{
 
@@ -26,29 +28,33 @@ class TaskService{
         return TaskResource::make($task);
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     public function listTask(TaskListDTO $dto): array
     {
-        $tasks = Task::where('user_id', Auth::id())
+        $tasks = Task::query()->with('subtasks')
+            ->where('user_id', Auth::id())
             ->whereNull('parent_id')
-            ->when($dto->status, function ($query, $status) {
+            ->when($dto->status, function (Builder $query, string|null $status) {
                 $query->where('status', $status);
             })
-            ->when($dto->priority, function ($query, $priority) {
+            ->when($dto->priority, function (Builder $query, int|null $priority) {
                 $query->where('priority', $priority);
             })
-            ->when($dto->search, function ($query, $search) {
+            ->when($dto->search, function (Builder $query, string|null $search) {
                 $query->whereFullText(['title', 'description'], $search);
             })
-            ->when($dto->sort, function ($query, $sort) {
+            ->when($dto->sort, function (Builder $query, string|null $sort) {
                 $this->applySorting($query, $sort);
             })
-            ->with('subtasks')
+            //->with('subtasks')
             ->get();
 
         return $this->fetchSubtasks($tasks);
     }
 
-    private function applySorting($query, string $sort): void
+    private function applySorting(Builder $query, string $sort): void
     {
         $sortArray = explode(',', $sort);
         foreach ($sortArray as $sortItem) {
@@ -63,21 +69,19 @@ class TaskService{
         }
     }
 
+    /**
+     * @param Collection<int, Task> $tasks
+     * @return array<int, array<string, mixed>>
+     */
     private function fetchSubtasks($tasks): array
     {
         $result = [];
+        /** @var Task $task */
         foreach ($tasks as $task) {
             $subtasks = $this->fetchSubtasks($task->subtasks);
-            $result[] = [
-                'id' => $task->id,
-                'title' => $task->title,
-                'description' => $task->description,
-                'priority' => $task->priority,
-                'status' => $task->status,
-                'completed_at' => $task->completed_at,
-                'parent_id' => $task->parent_id,
-                'subtasks' => $subtasks,
-            ];
+            $taskItem = $task->toArray();
+            $taskItem['subtasks'] = $subtasks;
+            $result[] = $taskItem;
         }
         return $result;
     }
