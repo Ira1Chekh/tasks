@@ -65,7 +65,7 @@ This is a Task Management API built with Laravel. The API allows you to manage t
     ```bash
     php artisan migrate
     ```
-4. Seed the database with initial data (optional):
+4. Seed the database with initial data (optional): //
     ```bash
     php artisan db:seed
     ```
