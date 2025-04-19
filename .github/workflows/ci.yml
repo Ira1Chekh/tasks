@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies (composer install)
         run: docker exec laravel-docker bash -c "cd /var/www/html && composer install --no-interaction --no-progress"
 
+      - name: Create .env file
+        run: docker exec laravel-docker bash -c "cd /var/www/html && cp .env.example .env"
+
       - name: Generate application key
         run: docker exec laravel-docker bash -c "cd /var/www/html && php artisan key:generate"
 
